@@ -1,0 +1,219 @@
+#!/bin/bash
+
+
+#	________________________________________________________________	#
+#	 ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||		#
+#	 /////////////////////  CS344 Program 1  \\\\\\\\\\\\\\\\\\\\\\		#
+#	/////////////////////        stats        \\\\\\\\\\\\\\\\\\\\\\	#
+#	\\\\\\\\\\\\\\\\\\\\\    by Jacob Karcz   //////////////////////	#
+#	 \\\\\\\\\\\\\\\\\\\\\      1.30.2017    //////////////////////		#
+#	 ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||		#
+#	================================================================	#
+
+
+
+#################################
+#        FUNCTIONS		#
+#################################
+
+#----------------------------------------------------------------------
+# syntax
+# function to display proper usage for stats program
+# + send error message to stderr
+#----------------------------------------------------------------------
+syntax  () {
+	echo "$0 {-rows | -cols} [input_file]" 1>&2
+}
+
+#----------------------------------------------------------------------
+# cleanUp
+# fucntion to erase all  temporary files created before exiting
+# user won't have any idea they were even created
+#----------------------------------------------------------------------
+cleanUp () {
+	rm -f datafile$$ tempRows$$ tempCols$$ tempMean$$ tempMedian$$
+	#exit 0
+}
+
+#/\/\/\//\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\#
+
+#				STATS MAIN					#
+
+#/\/\/\//\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\#
+
+# catch TERMinate, HangUP, and INTerrupt signales & delete temporary files
+trap "cleanUp; exit 1" TERM HUP INT;
+
+#################################
+#    User Input Verification	#
+#################################
+
+# create the variable that will hold the data
+datafilepath="datafile$$"; # unique temp file to hold data (used for stdin input)
+
+# if the user did not include a file (1 arguement)
+if [ "$#" = "1" ];
+then
+	# check that the user specified rows or columns
+	# if neither, quit with error message
+	if [[ $1 != -r* && $1 != -c* ]];
+	then 
+		syntax; # call syntax to echo error msg
+		exit 1; # exit with error code 1
+	fi
+
+	# save the stdin data to the file
+	cat > "$datafilepath";
+
+# if the user included a data file (2 arguements)
+elif [ "$#" = "2" ];
+then
+	datafilepath=$2; # don't create the temp file, use the file provided
+
+	# check that the file is readable, throw error & exit if not readable
+	if [ ! -r ./$2 ];
+	then
+        	echo "$0: cannot read $2" >&2;
+		exit 1;
+
+	# check that the user specified files or columns
+	# if neither, quit with error message
+	elif [[ $1 != -r* && $1 != -c* ]];
+	then 
+		syntax;
+		exit 1;
+
+	# check for an empty file, exit with no output & no error if empty
+	# -s is true if file is not of size 0 so [! -s file] is true if
+	# the file is of size 0 (empty file) 
+	elif [ ! -s $datafilepath ];
+	then
+		echo "$0: file $2 is empty";
+		exit 0;
+	fi
+
+# if the user used too few, or too many arguements in the command, 
+# display proper use, exit, and throw error
+else
+	syntax;
+	exit 1;
+fi
+
+
+###################################################
+#    Data Manipulation, Calculations, & Output    #
+###################################################
+
+#-----------
+# variables |
+#-----------
+sum=0;
+avgMean=0;
+avgMedian=0;
+i=1; #iteration count (rows)
+j=1; #iteration count (columns)
+
+########
+# Rows #
+########
+if [[ $1 == -r* ]];
+then
+	echo "Average Median"	
+	rowsFile="tempRows$$"; # temp file (uniqe bc pid) to hold the current row
+	while read line # as long as the file has more lines (rows), run loop 
+	do
+		# get total number of ints in the row
+		totNums=$(head -n 1 $datafilepath | wc -w); # == the number of words in the 1st row
+
+		# get the current working row of data from the main data file, arrange it into
+		# a column, sort them by number (-n) and print the column of data to the temp file
+		head -n $i $datafilepath | tail -1 | tr "\t" "\n" | sort -n > $rowsFile;
+	
+		# calculate the sum for the numbers in the row
+		sum=0;
+		while read num
+		do
+			sum=`expr $sum + $num`;
+		done < $rowsFile;
+	
+		#calculate the mean average and print it to the screen
+		avgMean=$(( ( sum + (( totNums / 2 )) ) / totNums ));
+		echo -n "$avgMean";		
+
+		#calculate the median average and print it to the screen
+		midNum=$(( ( $totNums / 2 ) + 1 )); #calculate the middle-most number (+1 bc of truncating & reqs) 
+		avgMedian=$(head -n $midNum $rowsFile | tail -1); # save the "middle" + 1 number
+		echo -e "\t$avgMedian";
+		
+		# increment iteration counter variable
+		i=`expr $i + 1`;
+	
+	done < $datafilepath; # finished extracting and manipulating the data in the user's file (exit 0)
+	
+###########
+# Columns #
+###########
+elif [[ $1 == -c* ]];
+then
+	# temp files (appended with pid)
+	colsFile="tempCols$$"; # file to hold the current working column
+	# mean and median files to ensure proper data output, intializd with title
+	meanFile="tempMean$$"; echo -e "Averages:" > $meanFile;
+	medianFile="tempMedian$$"; echo -e "Medians:" > $medianFile;
+
+	# variables
+	totNums=$(wc -l < $datafilepath); # number of lines in the file == numbers in the column
+	totCols=$(head -n 1 $datafilepath | wc -w); #number of words in 1st row == # of columns
+
+	# process file with  for loop counting up to the total number of columns in the file
+        for x in $(seq 1 $totCols)
+	do
+		# cut the current column out of the main data file and paste it into the temp file
+		cut -d "	" -f $j $datafilepath | sort -n > $colsFile;
+		
+		#calculate the sum of the numbers in the column
+		sum=0;
+		while read num
+		do
+			sum=`expr $sum + $num`;
+		done < $colsFile;
+
+                # calculate the average mean and print to file (seperated with tabs)
+                avgMean=$(( ( sum + (( totNums / 2 )) ) / totNums ));
+		echo -ne "$avgMean \t" >> $meanFile;
+
+                # calculate the median and print to file (seperated with tabs)
+                midNum=$(( ( $totNums / 2 ) + 1 )); #calculate the middle-most number (+1 bc of truncating & reqs)
+                avgMedian=$(head -n $midNum $colsFile | tail -1); # save the number at "middle" + 1
+		echo -ne "$avgMedian\t" >> $medianFile;
+
+		# increment iteration counter variable
+                j=`expr $j + 1`;
+
+	done
+	
+	# print the results to the screen
+	cat $meanFile; echo -ne "\n";
+	cat $medianFile; echo -ne "\n";
+
+#vestigial error trap for improper -c/-r syntax
+else
+	syntax;
+	exit 1;
+fi
+
+#script is finished, cleanup (erase temp files) and exit with no errors
+cleanUp;
+exit 0;
+
+
+#if the user terminates the program using HANGUP, INTERRUPT, or TERMINATE command
+#clean up temporary files before exiting (using cleanUp funciton)
+#trap cleanUp TERM HUP INT;
+
+
+#---------------------------------------------------#
+# CS344_400 Program 1: Stats			    #
+# by Jacob Karcz 01.18.2016 [the time before trump] #
+#---------------------------------------------------#
+
